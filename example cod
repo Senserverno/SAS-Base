@@ -1,0 +1,218 @@
+#1
+data delays;
+	set orion.orders;
+	Order_Month = month(Order_Date);
+	if Order_Month = 8;
+	where employee_id = 99999999 and Delivery_Date - 4 >=Order_date;
+	drop order_id order_type;
+	label Order_date = 'Дата заказа',
+		deleviry_date = 'Дата доставки',
+		Order_Month = 'Месяц заказа';
+	format Order_Date Delivery_Date DATE9.;
+run;
+
+PROC CONTENTS DATA=delays;
+RUN;
+
+PROC PRINT DATA=delays;
+RUN;
+
+#2
+title 'Customers with High Percentage of Suspicious Transactions';
+proc sql;
+select CustomerID, 
+       count(*) as TotalTransactions,
+       sum(Amount >= 500) as SuspiciousTransactions, 
+       calculated SuspiciousTransactions/calculated TotalTransactions as PCTSuspicious format=percent8.2
+    from sq.transactionfull
+    where Service ^= 'University'
+    group by CustomerID
+    having PCTSuspicious>.05
+    order by PCTSuspicious desc;
+quit;
+title;
+
+#3
+data work.ordertype;
+set orion.orders;
+DayOfWeek = weekday(Order_Date);
+length Type $13 SaleAds $13;
+
+if order_type = '1'
+then Type = 'Retail Sale';
+
+else if order_type = '2'
+then Type = 'Catalog Sale';
+
+else if order_type = '3'
+then Type = 'Internet Sale';
+
+if order_type = '1'
+then SaleAds = 'Retail';
+
+else if order_type = '2'
+then SaleAds = 'Mail';
+
+else if order_type = '3'
+then SaleAds = 'Email';
+
+drop Order_Type Employee_ID Customer_ID;
+run;
+
+proc print data=work.ordertype;
+run;
+
+#4
+DATA WORK.SOURCE;
+LENGTH CUSTOMER_ID 8 CUSTOMER_NAME $32 CUSTOMER_JOB $64 REGIST_DATE 8;
+FORMAT REGIST_DATE DATE9.;
+CUSTOMER_ID = '1';
+CUSTOMER_NAME = 'Bob';
+CUSTOMER_JOB = 'Student';
+REGIST_DATE = '25jan1995'd;
+OUTPUT;
+CUSTOMER_ID = '2';
+CUSTOMER_NAME = 'James';
+CUSTOMER_JOB = 'Director';
+REGIST_DATE = '17JUN1983'd;
+OUTPUT;
+RUN;
+
+PROC SQL NOPRINT;
+CREATE TABLE WORK.CR_TABLE
+(
+CUSTOMER_ID NUM,
+CUSTOMER_NAME CHAR(32),
+CUSTOMER_JOB CHAR(64),
+REGIST_DATE DATE
+)
+;
+QUIT;
+
+PROC SQL PRINT;
+
+SELECT CUSTOMER_ID, CUSTOMER_NAME,
+CUSTOMER_JOB, REGIST_DATE
+FROM WORK.SOURCE
+UNION
+SELECT CUSTOMER_ID, CUSTOMER_NAME,
+CUSTOMER_JOB, REGIST_DATE
+FROM WORK.CR_TABLE
+;
+
+INSERT INTO WORK.CR_TABLE
+SET CUSTOMER_ID = 3,
+CUSTOMER_NAME = 'John',
+CUSTOMER_JOB = 'Programmer',
+REGIST_DATE = '01JAN2001'd;
+
+
+ALTER TABLE WORK.CR_TABLE
+MODIFY CUSTOMER_ID LABEL = 'ID сотрудника',
+CUSTOMER_NAME LABEL = 'Профессия сотрудника ';
+
+ALTER TABLE WORK.CR_TABLE
+ADD CUSTOMER_AGE NUM;
+
+UPDATE WORK.CR_TABLE
+SET CUSTOMER_AGE = YEAR(today()-REGIST_DATE)
+;
+
+DELETE FROM WORK.CR_TABLE
+WHERE CUSTOMER_AGE > 25
+;
+QUIT;
+
+
+#5
+data orion.survey;
+length id 3 Gender $1 age 3 salary 3;
+input ID Gender Age Salary (Ques1-Ques5) ($);
+datalines;
+001 M 23 28000 1 2 1 2 3
+002 F 55 76123 4 5 2 1 1
+003 M 38 36500 2 2 2 2 1
+004 F 67 12800 5 3 2 2 4
+;
+
+run;
+
+PROC FORMAT;
+VALUE $gender 'M' = 'MALE'
+'F' = 'FEMALE'
+'' = 'NOT ENTERED';
+VALUE age low-29 = 'lESS THEN 30'
+30-50 = '30 TO 50'
+51-HIGH = '51+';
+VALUE $likert '1' = 'Strongly disagree'
+'2' = 'Disagre'
+'3' = 'No opinion'
+'4' = 'Agree'
+'5' = 'Strongly agree';
+RUN;
+
+title "Data Set SURVEY with Formatted Values";
+
+proc print data=orion.survey;
+id ID;
+var Gender Age Salary Ques1-Ques5;
+format Gender $gender.
+Age age.
+Ques1-Ques5 $likert.
+Salary dollar11.2;
+run;
+
+
+#6
+PROC SQL NOPRINT;
+CREATE TABLE WORK.VALID_STRUCTURE_MOVESALE
+(
+Date_day numeric,
+LOCATION_ID numeric,
+PRODUCT_ID numeric,
+Sls_Retail_AD_Rub numeric,
+Sls_Retail_BD_Rub numeric,
+Sls_Retail_Qty numeric,
+Small_Scale_Wholesales numeric,
+Small_Scale_Wholesales_AD_RUB numeric,
+VERSION_ID numeric,
+location_id_char numeric,
+product_id_char numeric,
+return_ad_rub numeric,
+return_qty numeric
+)
+;
+QUIT;
+
+DATA WORK.GET_OBJECTS;
+SET SASHELP.VTABLE(WHERE=(%UPCASE(LIBNAME)="IMPORT"
+AND %UPCASE(MEMNAME) CONTAINS "MOVESALE_"));
+RUN;
+
+PROC SQL NOPRINT;
+SELECT COUNT(LIBNAME) INTO :mvCNT FROM GET_OBJECTS;
+SELECT LIBNAME INTO :mvVAR_NAMES_LIST SEPARATED BY " " FROM GET_OBJECTS;
+/* транспонируем таблицы в строки */
+
+%PUT &mvVAR_NAMES_LIST;
+%PUT mv_CNT = %SYSFUNC(COUNTW(&mvVAR_NAMES_LIST, " "));
+/* используем сисфанк, так как используем функции SASBASE, SYSFUNC по сути расширяет функцию */
+QUIT;
+
+DATA WORK.VALID_CONT;
+SET WORK.VALID_STRUCTURE_MOVESALE;
+STOP;
+RUN;
+
+DATA ETL_LIB.MOVESALE_VALID;
+SET WORK.VALID_CONT;
+STOP;
+DO I = 1 TO mv_CNT;
+mvTABLE_NAMES = mvTABLE_NAME;
+mvLIB_NAMES = mvLIB_NAME;
+
+/* &mvTABLE_NAME &mvLIB_NAME */
+
+OUTPUT;
+END;
+RUN;
